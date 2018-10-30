@@ -1,0 +1,668 @@
+/*###################################################################################
+# Nombre Del Programa : ACTBCMRAMEXQ10_01.pc                                        #
+# Autor               : HPG                                                         #
+# Compania            : Teotl                                                       #
+# Proyecto/procliente : P-20-5082-17                         Fecha: 11/04/2018      #
+# Descripcion General : Incorporacion AMEX - Sponsored Merchant File Elavon         #
+# Programa Dependiente: N/A                                                         #
+# Programa Subsecuente: N/A                                                         #
+# Cond. De Ejecucion  : N/A                                                         #
+# Dias De Ejecucion   : N/A                                     Horario: N/A        #
+#                              MODIFICACIONES                                       #
+#-----------------------------------------------------------------------------------#
+# Autor               : HPG                                                         #
+# Compania            : Teotl                                                       #
+# Proyecto/procliente : P-20-0115-16 D70                     Fecha: 12/05/2018      #
+# Descripcion General : SMF vacio                                                   #
+#-----------------------------------------------------------------------------------#
+# Autor               : HPG                                                         #
+# Compania            : Teotl                                                       #
+# Proyecto/procliente : P-20-0115-16 D110                    Fecha: 02/07/2018      #
+# Descripcion General : Valores del SPOIG                                           #
+#-----------------------------------------------------------------------------------#
+# Numero De Parametros: N/A                                                         #
+# Parametros Entrada  : N/A                                     Formato: N/A        #
+# Parametros Salida   : N/A                                     Formato: N/A        #
+###################################################################################*/
+
+/* Declaracion de Librerias y Constantes */
+#include <stdio.h>    
+#include <string.h>   
+#include <fcntl.h>    
+#include <math.h>
+#include <sys/stat.h> 
+#include <sys/types.h>
+#include <signal.h>
+#include <utmp.h>     
+#include <sqlca.h>    
+#include <oraca.h>    
+#include <time.h>    
+
+EXEC ORACLE OPTION (ORACA=YES);
+
+/* Definiciones fijas   */
+#define Max_Linea  2000 /* Amplitud de linea del archivo    */
+#define Str_Len    70 
+#define MENSAJE    59 
+#define MENSAJE2   48 
+
+/* Declaracion de variables y constantes Globales */
+
+char  Arch_Sal[2000];                 /* Nombre del archivo de trabajo     */
+char  Arch_Sal2[2000];                /* Nombre del archivo de trabajo     */
+char  Arch_Sal3[2000];                /* Nombre del archivo de trabajo     */
+char  Nom_Arch1[37];                  /* Nombre archivo Comerios           */
+char  Nom_Arch2[37];                  /* Nombre archivo Terminales         */
+char  Nom_Arch3[37];                  /* Nombre archivo Terminales         */
+char  Ruta[70];                       /* Path de trabajo                   */
+char  Ruta2[70];                      /* Path de trabajo                   */
+char  Banco[5];                       /* Valida entrada Banco              */
+   
+char Fecha_Ini  [9];                 /* Rango de fechas para respuesta    */
+char Fecha_Fin  [9];
+char Fecha_Gen  [20];
+char FECHA_INICIO [20];
+char FECHA_FINAL  [20];
+
+char Movimiento [03];                 /* Movimiento del registro          */
+char fname[Str_Len]; 
+char vmensaje[22]; 
+char vout[100];
+char varchivo[21];
+long totalRegComer = 0L;  
+long totalGraComer = 0L;  
+long totalRegErr   = 0L;  
+long totalGraTerm  = 0L;  
+
+char  Banco2[4];
+long totalRegCS = 0L;                           
+long totalGraCS = 0L;                           
+long totalRegTS = 0L;                           
+long totalGraTS = 0L;                           
+
+FILE *FSalida;                        /* Archivo de trabajo              */
+FILE *FSalida2;                       /* Archivo de trabajo              */  
+FILE *FEntradaCom;                    /* Archivo de trabajo              */  
+FILE *FTotal;                         /* Archivo total de transacciones */
+char  *oracleid = "/";                /* Conexion con Usuario autentificado*/
+     
+/* Precompilador    */
+
+void respuesta_comercios();           /* Salida de Comercios */
+void respuesta_terminales();          /* Salida de Terminales */
+int  abre_archivos ( char *Path_Nombre, char *Apertura );
+char *rtrim();                        /* Elimina espacios a la derecha     */
+char *ltrim();                        /* Elimina espacios a la izquierda   */
+
+char username[30];                                                           
+
+/******************************************************************************/
+/*  Mensaje de Error del SQL                                                  */
+/******************************************************************************/
+void  sql_error ( msg )
+char *msg;
+{
+    char err_msg[512];
+    size_t buf_len, msg_len;
+    char edo[10];
+    char cad_error[MENSAJE]; 
+    char cad_error2[MENSAJE2]; 
+    char field_temp[100]; 
+
+    memset(&field_temp,' ',sizeof(field_temp));    
+    
+    strcpy(edo,"ERROR");
+    EXEC SQL WHENEVER SQLERROR CONTINUE;   
+    printf("%s\n", msg);
+
+    /* LLAMA A sqlglm() PARA OBTENER EL TEXTO DEL MENSAJE */
+    buf_len = sizeof (err_msg);
+    sqlglm(err_msg, &buf_len, &msg_len);
+
+    /*  forma el mensaje   */ 
+    EXEC SQL WHENEVER SQLERROR DO errores("ERROR BD"); 
+    EXEC SQL 
+    SELECT 'DOMD'||' '||'ACT '||' '||TO_CHAR(SYSDATE, 'DDMM')||'-'||TO_CHAR(SYSDATE, 'HH24')||'-'||TO_CHAR(SYSDATE, 'MI') 
+     INTO :vmensaje 
+     FROM dual; 
+
+     if ((msg_len == NULL && msg != NULL) || (msg_len != NULL && msg != NULL)) 
+      { 
+       strncpy(field_temp, msg, 59); 
+       memcpy(cad_error, field_temp, MENSAJE); 
+
+    /* Imprime el mensaje programamdo por el usuario en pantalla */
+    /* printf("ERROR del Usuario: %s%s\n", vmensaje, cad_error);  */
+
+      } 
+     else 
+      { 
+        strncpy(field_temp, msg, 48); 
+        memcpy(cad_error2, field_temp, MENSAJE2); 
+
+        /* Imprime el mensaje de oracle en  pantalla */
+        printf("ERROR ORACLE: %s%.*s", vmensaje, msg_len, cad_error2); 
+      }  
+
+    /*Imprime el mensaje en pantalla*/ 
+    printf("         %.*s\n\n", msg_len, err_msg); 
+
+    /* LIBERA LA SESION DE ORACLE */
+    EXEC SQL ROLLBACK RELEASE;
+
+    /* TERMINA EL PROCESO */
+    exit(1);
+} 
+
+/******************************************************************************/
+/*  Apertura de Archivo de Trabajo                                            */
+/******************************************************************************/
+int abre_archivos ( char *Path_Nombre, char *Apertura )
+{                                                                               
+  char aux_mens[81]; 
+  char aux_path[70]; 
+
+   if ( ( FSalida = fopen ( Path_Nombre, Apertura ) ) == NULL ) 
+   { 
+     /*presenta mensaje de error al usuario*/ 
+     printf("\nError al abrir %s", aux_mens); 
+     exit (-1); 
+   } 
+
+   return 0;    
+}
+
+int abre_archivos2 ( char *Path_Nombre, char *Apertura )
+{                                                                               
+  char aux_mens[81]; 
+  char aux_path[70]; 
+
+   if ( ( FSalida2 = fopen ( Path_Nombre, Apertura ) ) == NULL ) 
+   { 
+     /*presenta mensaje de error al usuario*/ 
+     printf("\nError al abrir %s", aux_mens); 
+     exit (-1); 
+   } 
+
+   return 0;    
+}
+
+/**************************************/
+/* Apertura de Archivo de promociones */
+/**************************************/
+int abre_arch_com ( char *Path_Nombre, char *Apertura )
+{                                                                               
+  char aux_mens[81]; 
+  char aux_path[70]; 
+
+   if ( ( FEntradaCom = fopen ( Path_Nombre, Apertura ) ) == NULL ) 
+   { 
+     /*presenta mensaje de error al usuario*/ 
+     printf("\nError al abrir %s\n", Path_Nombre); 
+     exit (-1); 
+   } 
+
+   return 0;    
+}
+
+/**************************
+* Graba Archivo de Cifras *
+***************************/
+void graba_cifras()
+
+{
+      EXEC SQL WHENEVER SQLERROR DO sql_error("ORACLE error--\n");
+      EXEC SQL 
+       INSERT INTO TBL_BDU_BIT_SISTEMA (
+         BIT_FECHA, BIT_USUARIO, BIT_MOVIMIENTO, OID, BIT_BANCO) 
+       VALUES (SYSDATE, USER, 'CARGA SPONSOR MERCH FILE', 1000, 3);
+      EXEC SQL COMMIT;
+}
+
+/**************************
+* Valida Fechas           *
+***************************/
+void valida_fechas ()
+
+{
+      char fecha3[7];    
+
+      EXEC SQL SELECT  TO_CHAR( sysdate,'YYMMDD')        
+               INTO :fecha3   
+                   FROM dual
+               WHERE TO_DATE(:Fecha_Ini,'YYMMDD') <= SYSDATE;
+                 
+      if (fecha3 == NULL)
+        {
+          printf ("ERROR: La fecha es invalida\n");
+          exit(1);
+        }
+}
+
+/**************************
+* Conexion Oracle         *
+***************************/
+int conexion_oracle (void)                                                      
+{                                                                               
+int error;                                                                      
+        EXEC SQL WHENEVER SQLERROR DO sql_error("ORACLE error--\n");            
+        EXEC SQL CONNECT :username;                                             
+                                                                                
+      if (sqlca.sqlcode <0)                                                     
+           error=0;                                                             
+        else                                                                    
+           error=1;                                                             
+                                                                                
+        return error;
+}                                                                               
+
+/******************************************************************************
+** Programa Principal                                                        **
+******************************************************************************/
+
+int main(int argc, char *argv[])
+{
+
+  char banco[5];        
+  char fechaini[9];     
+  char fechafin[9];     
+  char ruta[70];        
+  char ruta2[70];        
+  char nomarch1[37];    
+  char nomarch2[37];    
+
+  printf("\n ACTBCMRAMEXQ10_01  Version [P-20-5082-17 16/Abr/2018] \n");
+ 
+  if (argc != 7) /* 6)  */
+  {
+    printf(" Valor del argc:%d:\n",argc);
+    fprintf (stderr,"ERROR: %s <usuario> <fecha> <ruta ent> <arch ent> <ruta sal> <banco>\n",argv[0]);
+    return 1;
+  }
+
+ strcpy(username, argv[1] );
+ printf ( "\nInicia conexion Oracle.\n" ); 
+ conexion_oracle ();
+
+ strcpy(fechaini,argv[2]);                 
+ strcpy(ruta,argv[3]);                     
+ strcpy(nomarch1,argv[4]);                 
+ strcpy(ruta2,argv[5]);                 
+ strcpy(banco,argv[6]);
+
+  strcpy(Fecha_Ini,fechaini);              
+  strcpy(Ruta,ruta);
+  strcpy(Nom_Arch1,nomarch1);
+  strcpy(Ruta2,ruta2);
+  strcpy(Banco, banco);
+/* cambia fechas para tomar rangos de horas definidos para archivos diarios */  
+   strcpy (FECHA_INICIO,Fecha_Ini);
+   strcat (FECHA_INICIO,"0000");
+   strcpy (FECHA_FINAL,Fecha_Fin);
+   strcat (FECHA_FINAL,"2359");
+
+/*    printf ( "\nFecha_Ini. %s", Fecha_Ini);
+      printf ( "\nFecha_Fin. %s", Fecha_Fin);
+      printf ( "\nFECHA_INICIO. %s", FECHA_INICIO);
+      printf ( "\nFECHA_FINAL. %s", FECHA_FINAL);  */
+
+    printf ( "\nInicia Proceso        \n" );
+
+    printf ("\nValida Fechas ........\n " );
+    valida_fechas();
+
+   /* Ejecuta respuesta */
+      printf ( "\nProcesa sponsor merchant file..... \n" );
+      respuesta_comercios();
+
+   /* Graba archivo de cifras          */
+      printf ( "\nGraba Archivo de Cifras..... \n" );
+      /* graba_cifras(); */
+
+   /* Termina el proceso y la conexion a ORACLE */
+      printf ( "\nTermina proceso y conexion a Oracle.... \n" );
+      EXEC SQL ROLLBACK  RELEASE;
+
+      printf ( "\nTermina proceso ...... \n" );
+    return 0;
+}
+
+/***********************/
+char *rtrim ( cadena )
+char *cadena;
+{
+  int i;
+  char * p;
+  i = strlen ( cadena );
+  p = cadena + i - 1;
+  
+  while ( (p[0] == ' ' || (unsigned char)p[0] == 10 ) && (p >= cadena) )
+  {
+    p[0] = 0;
+    p--;
+  }
+
+  return ( cadena );
+} /* rtrim */
+
+/***********************/
+char *ltrim ( cadena )
+char *cadena;
+{
+  int i;
+  char sBuffer[Max_Linea];
+  i = 0;
+  while ( cadena[i] == ' ')
+    i++;
+  strcpy ( sBuffer , &(cadena[i]) );
+  strcpy ( cadena , sBuffer );
+
+  return ( cadena );
+} /* ltrim */
+
+/******************************************************************************
+*   Respuesta promociones                                                    **
+*******************************************************************************/
+
+void respuesta_comercios ()
+{
+
+   char aux_mens                    [100]; 
+   char aux_arch_sal                [70]; 
+   char vsau_num_aut[7];
+   char vsau_fe_ho_fin[15];
+   char *ptr;
+
+   char buf[5000][80]; 
+   char line[2800]; 
+   char comer[11];
+   char debi[8];
+   char trai[2];
+   char procesado[2];
+   char tipomov[3];
+   char industriaax[11];
+   char selleridax[21];
+   char tiponeg[2];
+   char substrind[3];
+   char autorizado[2];
+   char vout2[79];
+   char Final[2];
+   char buzon[9];
+   int  NCOM, NCRE, NDEB, NTRA, NAR, RECORD_SIZE; 
+   int  lng[80]; 
+   int  pos;
+   int existe;
+   int existe2;
+   int  NREG, i, j;
+   NCOM = 9;
+   NCRE = 1;
+   NDEB = 7;
+   NTRA = 1;
+   NAR  = 25;
+   RECORD_SIZE = 2800;
+
+   /*--------------------------------------------------------------*/
+   printf ( "\narchivo: %s", Nom_Arch1);
+
+   /*
+    EXEC SQL
+     SELECT SUBSTR(:Nom_Arch1,29,8)
+     INTO :buzon
+     FROM dual;
+   */
+    EXEC SQL 
+     SELECT 'MB000037'
+     INTO :buzon
+     FROM dual;
+
+     /* Forma Path + Nombre del Archivo */
+     /* Archivo de resp */   
+     strcpy (Arch_Sal,Ruta2);
+     sprintf(Arch_Sal,"%s/ACTCMRAMEXD%sED11.DAT",Ruta2, Fecha_Ini);
+
+     if ( abre_archivos ( Arch_Sal, "w" ) != 0 )
+     {
+       /* presenta mensaje de error al usuario*/ 
+       printf ( "\nNo se puede abrir el archivo %s", Arch_Sal ); 
+       exit(2); 
+     }
+
+     /* printf ("archivo: %s \n", Nom_Arch1); 
+        printf ("proc: %s \n", procesado); */
+
+    totalRegComer=0L;
+    totalRegComer++; /* 1 */
+
+    EXEC SQL WHENEVER SQLERROR do sql_error();
+
+    EXEC SQL DECLARE industriae CURSOR FOR
+    SELECT A.IND_CVE, DECODE(SUBSTR(A.IND_CVE,9,2),'35','D','43','G','50','S','18','R','67','Q','17','M','S')
+    FROM ACT.TBL_BDU_INDUSTRIA_AX A
+    WHERE IND_FIID=3
+    ORDER BY 1;
+
+    printf ( "\nHDR: %s", Nom_Arch1);
+
+    EXEC SQL OPEN industriae;
+    EXEC SQL WHENEVER SQLERROR DO sql_error("Error en reporte HDR");
+    EXEC SQL WHENEVER NOT FOUND DO break;
+
+    for (;;)
+    {
+     EXEC SQL FETCH industriae INTO
+       :industriaax,
+       :tiponeg;
+
+     EXEC SQL
+     SELECT 'HDR00000001      135ELV                          PROMOCION Y OPERACION                   '||:industriaax||'005MX     01'||
+     TO_CHAR(SYSDATE,'YYYYMMDD')||TO_CHAR(SYSDATE,'HH24MMSS')||TO_CHAR(SYSDATE,'YYYYMMDD')||TO_CHAR(SYSDATE,'HH24MMSS')||
+     '                                             '||LPAD(' ',2567,' ')
+     INTO :line
+     FROM DUAL;
+
+     fprintf(FSalida,"%.2751s\n", line); 
+
+     printf ( "\nDTL: %s", industriaax);
+
+    /* Inicio: P-20-0115-16 D70 */
+    EXEC SQL DECLARE detallee CURSOR FOR
+    SELECT A.COM_SELLER_ID
+    FROM TBL_BDU_COMERCIO_AX A
+    WHERE A.COM_IND_CVE = :industriaax
+     AND A.COM_BCO=3
+     AND A.COM_CMP_FLG IS NULL
+    ORDER BY 1;
+    /* Terminacion: P-20-0115-16 D70 */
+
+    EXEC SQL OPEN detallee;
+    EXEC SQL WHENEVER SQLERROR DO sql_error("Error en reporte DTL");
+    EXEC SQL WHENEVER NOT FOUND DO break;
+
+    for (;;)
+    {
+
+    EXEC SQL FETCH detallee INTO :selleridax;
+
+   /* Inicio: P-20-0115-16 D110 */
+    EXEC SQL
+    SELECT
+    A.COM_SELLER_ID||RPAD(C.COM_RAZON,60,' ')||RPAD(C.COM_NOMBRE,60,' ')||
+    RPAD(REPLACE(C.COM_RFC,' ',''),15,' ')||LPAD(C.COM_GIRO_ID,4,'0')||RPAD(D.COM_DOMICILIO,40,' ')||
+    RPAD(P.PBI_NOMBRE,40,' ')||
+    /* Inicio: P-20-0115-16 D70 */
+   /* Inicio: P-20-0115-16 D110 */
+    RPAD(E.EDO_AX,6,' ')||
+    RPAD(LPAD(CP.CP_CVE,5,'0'),15,' ')||'MX'||'52'||RPAD((D.COM_LADA_1||D.COM_TELEFONO),22,' ')||
+    RPAD(NVL(D.COM_EMAIL,' '),254,' ')||RPAD(' ',254,' ')||'MXN'||RPAD(NVL(A.COM_NM_RL1,' '),20,' ')||
+    RPAD(NVL(A.COM_AP_PAT_RL1,' '),20,' ')||'ES '||RPAD(NVL(A.COM_NM_RL1,' '),20,' ')||RPAD(NVL(A.COM_AP_PAT_RL1,' '),20,' ')||
+    RPAD(NVL(A.COM_ID_RL1,' '),30,' ')||RPAD(NVL(A.COM_FEC_NAC_RL1,' '),8,' ')||
+    RPAD(NVL(A.COM_DOM_RL1,' '),40,' ')||RPAD(NVL(A.COM_CD_RL1,' '),40,' ')||
+    RPAD(E.EDO_AX,6,' ')||
+    /* Terminacion: P-20-0115-16 D70 */
+    RPAD(LPAD(NVL(A.COM_CP_RL1,'0'),5,'0'),15,' ')||'MXN'||' '||' '||NVL(A.COM_MOV_AX,' ')||
+    DECODE(NVL(A.COM_MOV_AX,' '),'N',TO_CHAR(A.COM_FEC_MOD,'YYYYMMDD'),'D',TO_CHAR(A.COM_FEC_MOD,'YYYYMMDD'),'R',TO_CHAR(A.COM_FEC_MOD,'YYYYMMDD'),'        ')||RPAD(' ',40,' ')||
+    RPAD(SUBSTR(CP.CP_COLONIA,1,40),40,' ')||RPAD(' ',80,' ')||
+    'REPRESENTANTE LEGAL '||RPAD(' ',160,' ')||RPAD(' ',61,' ')||RPAD(' ',18,' ')||
+    '             '||RPAD(' ',1245,' ')
+    INTO :line
+    FROM TBL_BDU_COMERCIOS C,
+      TBL_BDU_COMERCIOS_ADDRESS_N D,
+      TBL_BDU_COMERCIO_AX A,
+      TBL_BDU_CP CP,
+      TBL_BDU_POBLACIONES P,
+   /* Inicio: P-20-0115-16 D110 */
+      TBL_BDU_ESTADOS E
+    WHERE C.COM_AFILIACION = A.COM_AFILIACION
+    AND C.COM_AFILIACION = D.COM_ID
+    AND D.COM_TIPO_DATO_ID = 1
+    AND D.COM_CP_ID = CP.OID
+    AND CP.CP_POBLACION_ID = P.OID
+    AND P.PBI_EDO_ID = E.OID
+   /* Terminacion: P-20-0115-16 D110 */
+    /* Inicio: P-20-5082-17 */
+    AND A.COM_CMP_FLG IS NULL
+    AND A.COM_SELLER_ID = :selleridax;
+
+    totalRegComer++;
+
+    fprintf(FSalida,"DTL%08d%.2740s\n", totalRegComer,line);
+
+    printf ( "\nDT2: %s", industriaax);
+
+    totalRegComer++; /* 3 */
+  /* Inicio: P-20-0115-16 D110 */
+    EXEC SQL
+    SELECT
+    A.COM_SELLER_ID||RPAD(NVL(A.COM_ID_RL1,' '),30,' ')||
+    RPAD(NVL(A.COM_FEC_NAC_RL1,' '),8,' ')||
+    RPAD(NVL(A.COM_DOM_RL1,' '),40,' ')||RPAD(' ',160,' ')||
+    RPAD(NVL(A.COM_CD_RL1,' '),40,' ')||
+    /* Inicio: P-20-0115-16 D70 */
+   /* Inicio: P-20-0115-16 D110 */
+    RPAD(NVL(E1.EDO_AX,' '),6,' ')||
+    RPAD(LPAD(NVL(A.COM_CP_RL1,'0'),5,'0'),15,' ')||'MX'||
+    RPAD(NVL(SUBSTR(A.COM_NM_RL2,1,20),' '),20,' ')||RPAD(NVL(SUBSTR(A.COM_AP_PAT_RL2,1,20),' '),20,' ')||
+    RPAD(NVL(A.COM_ID_RL2,' '),30,' ')||RPAD(NVL(A.COM_FEC_NAC_RL2,' '),8,' ')||
+    RPAD(NVL(A.COM_DOM_RL2,' '),40,' ')||RPAD(' ',160,' ')||
+    RPAD(NVL(A.COM_CD_RL2,' '),40,' ')||
+    RPAD(NVL(E2.EDO_AX,' '),6,' ')||
+   /* Terminacion: P-20-0115-16 D110 */
+    /* Terminacion: P-20-0115-16 D70 */
+    RPAD(LPAD(NVL(A.COM_CP_RL2,'0'),5,'0'),15,' ')||'MX'||
+    RPAD(' ',70,' ')||'00000000'||RPAD(' ',263,' ')||RPAD(' ',70,' ')||'00000000'||RPAD(' ',263,' ')||RPAD(' ',1000,' ')||
+    RPAD(' ',18,' ')||RPAD('0',48,'0')||RPAD(' ',200,' ')||
+    RPAD(' ',52,' ')||RPAD(' ',50,' ')||
+    RPAD(' ',27,' ')
+    INTO :line
+    FROM TBL_BDU_COMERCIO_AX A,
+    (SELECT DISTINCT CP_CVE, CP_POBLACION_ID
+    FROM TBL_BDU_CP) CP1,
+    (SELECT DISTINCT CP_CVE, CP_POBLACION_ID
+    FROM TBL_BDU_CP) CP2,
+    TBL_BDU_POBLACIONES P1,
+    TBL_BDU_POBLACIONES P2,
+    TBL_BDU_ESTADOS E1,
+    TBL_BDU_ESTADOS E2
+    WHERE NVL(A.COM_CP_RL1,'00000') = CP1.CP_CVE(+)
+    AND NVL(A.COM_CP_RL2,'00000') = CP2.CP_CVE(+)
+    AND CP1.CP_POBLACION_ID = P1.OID(+)
+    AND CP2.CP_POBLACION_ID = P2.OID(+)
+    AND P1.PBI_EDO_ID = E1.OID(+)
+    AND P2.PBI_EDO_ID = E2.OID(+)
+    /* Terminacion: P-20-0115-16 D110 */
+    AND A.COM_CMP_FLG IS NULL
+    AND A.COM_SELLER_ID = :selleridax;
+
+    fprintf(FSalida,"DT2%08d%.2740s\n", totalRegComer,line);
+    
+    EXEC SQL
+      UPDATE TBL_BDU_COMERCIO_AX
+      SET COM_CMP_FLG = 1
+      WHERE COM_SELLER_ID = :selleridax;
+
+    EXEC SQL COMMIT;
+   } /* detalle */
+
+printf ( "\nTLR: %s", Nom_Arch1);
+
+  /* if(totalRegComer==1){ */
+    totalRegComer++; /* 4 */
+  /* } */
+
+    EXEC SQL
+    SELECT 'TLR'||LPAD(:totalRegComer,8,'0')||LPAD(:totalRegComer,9,'0')||LPAD(' ',2731,' ')
+    INTO :line
+    FROM DUAL;
+
+    fprintf(FSalida,"%.2751s\n", line);
+    
+    totalRegComer=1L;
+    
+  } /* industria */
+
+  if (fclose ( FSalida )){ 
+    /*presenta mensaje de error al usuario*/ 
+    printf("Error al cerrar el archivo sponsor\n"); 
+    exit (1);
+  }
+
+  /* registra ejecucion de proceso */ 
+  /* EXEC SQL
+   INSERT INTO TBL_ACT_BIT_PROCESOS(OID,FECHA,USUARIO,DESCRIPCION)
+   VALUES(act.seq_agp_bit_procesos.NEXTVAL,SYSDATE,USER,:Nom_Arch1);
+  */
+
+  control1:
+
+  EXEC SQL COMMIT;
+}
+
+/*************************************************************************** 
+ * Errores cuando no hay Base de Datos                                     * 
+ ***************************************************************************/ 
+errores(char *tipo) 
+{ 
+   char cad[25]; 
+   struct tm *local, *gm; 
+   time_t t; 
+   char dia[3]; 
+   char mes[3]; 
+   char hra[3]; 
+   char min[3]; 
+   char v_dia[3]; 
+   char v_mes[3]; 
+   char v_hra[3]; 
+   char v_min[3]; 
+
+  if(strcmp(tipo,"ERROR BD") == 0) 
+   { 
+   t = time (NULL); 
+   local = localtime(&t); 
+
+   strftime(dia, 3, "%d",local); 
+   strftime(mes, 3, "%m",local); 
+   strftime(hra, 3, "%H",local); 
+   strftime(min, 3, "%M",local); 
+
+   strcpy(v_dia,dia); 
+   strcpy(v_mes,mes); 
+   strcpy(v_hra,hra); 
+   strcpy(v_min,min); 
+
+   strcat(cad, "DOMB"); 
+   strcat(cad, " "); 
+   strcat(cad, "BDU "); 
+   strcat(cad, " "); 
+   strcat(cad, v_dia); 
+   strcat(cad, v_mes); 
+   strcat(cad, "-"); 
+   strcat(cad, v_hra); 
+   strcat(cad, "-");
+   strcat(cad, v_min);
+   strcat(cad, " ");
+
+   strcpy(vmensaje, cad);
+   return;
+   }
+}
+/* ---------------------- Fin del Programa -----------------------------------*/
